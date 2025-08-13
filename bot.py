@@ -1,4 +1,3 @@
-import os
 import asyncio
 from typing import Dict, List, Optional
 from pyrogram import Client, filters
@@ -9,7 +8,6 @@ from pytgcalls.types.stream import StreamAudioEnded
 from pytgcalls.types.input_stream import AudioPiped, InputStream
 import yt_dlp
 
-# Directly set your credentials here (for local testing only)
 API_ID = 21104628
 API_HASH = "45261b9ce50786fc8ab1a8b45494f577"
 BOT_TOKEN = "8299919094:AAHzRFwXOYI0hDlLc8smrABr4R7zlR0ib9Q"
@@ -63,15 +61,9 @@ async def start_stream(chat_id: int):
     track = queues[chat_id].pop(0)
     now_playing[chat_id] = track
     try:
-        await voice.join_group_call(
-            chat_id,
-            InputStream(AudioPiped(track["url"])),
-        )
+        await voice.join_group_call(chat_id, InputStream(AudioPiped(track["url"])))
     except Exception:
-        await voice.change_stream(
-            chat_id,
-            InputStream(AudioPiped(track["url"]))
-        )
+        await voice.change_stream(chat_id, InputStream(AudioPiped(track["url"])))
 
 @voice.on_stream_end()
 async def on_stream_end(_: PyTgCalls, update: Update):
@@ -81,92 +73,30 @@ async def on_stream_end(_: PyTgCalls, update: Update):
 
 @app.on_message(filters.command(["start"]))
 async def start_cmd(_, m: Message):
-    await m.reply_text(
-        "Namaste! Main group voice chat mein gaane chala sakta hoon.\n"
-        "Commands: /joinvc, /play <query>, /queue, /skip, /stop, /leavevc"
-    )
-
-@app.on_message(filters.command(["joinvc"]))
-async def join_vc(_, m: Message):
-    chat_id = m.chat.id
-    try:
-        await voice.join_group_call(chat_id, InputStream(AudioPiped("anullsrc")))
-        await voice.leave_group_call(chat_id)
-        await m.reply_text("Voice chat ready! Ab /play bheje.")
-    except Exception as e:
-        await m.reply_text(f"Join failed: {e}")
-
-@app.on_message(filters.command(["leavevc"]))
-async def leave_vc(_, m: Message):
-    try:
-        await voice.leave_group_call(m.chat.id)
-        await m.reply_text("Left voice chat.")
-    except Exception as e:
-        await m.reply_text(f"Leave failed: {e}")
+    await m.reply_text("Namaste! Main group voice chat mein gaane chala sakta hoon.\nUse /play <song> to play.")
 
 @app.on_message(filters.command(["play"]))
 async def play_cmd(_, m: Message):
     chat_id = m.chat.id
     if len(m.command) < 2:
-        return await m.reply_text("Usage: /play <YouTube URL ya search>")
+        return await m.reply_text("Usage: /play <YouTube URL or search>")
     query = m.text.split(None, 1)[1].strip()
     await ensure_queue(chat_id)
-    msg = await m.reply_text("Searching/processing…")
+    msg = await m.reply_text("Searching…")
     try:
         info = await ytdlp_extract(query)
         queues[chat_id].append(info)
-        await msg.edit_text(f"Queued: **{info['title']}**\n{info['webpage_url']}")
+        await msg.edit_text(f"Queued: {info['title']}")
         if not now_playing.get(chat_id):
-          await start_stream(chat_id)
+            await start_stream(chat_id)
     except Exception as e:
-        await msg.edit_text(f"Play failed: {e}")
-
-@app.on_message(filters.command(["queue"]))
-async def queue_cmd(_, m: Message):
-    chat_id = m.chat.id
-    await ensure_queue(chat_id)
-    text = []
-    cur = now_playing.get(chat_id)
-    if cur:
-        text.append(f"Now: **{cur['title']}**")
-    if queues[chat_id]:
-        for i, t in enumerate(queues[chat_id], 1):
-            text.append(f"{i}. {t['title']}")
-    if not text:
-        text = ["Queue khaali hai. /play bheje!"]
-    await m.reply_text("\n".join(text))
-
-@app.on_message(filters.command(["skip"]))
-async def skip_cmd(_, m: Message):
-    chat_id = m.chat.id
-    try:
-        await voice.change_stream(chat_id, InputStream(AudioPiped("anullsrc")))
-        await m.reply_text("Skipped. Next track…")
-    except Exception as e:
-        await m.reply_text(f"Skip failed: {e}")
-
-@app.on_message(filters.command(["stop"]))
-async def stop_cmd(_, m: Message):
-    chat_id = m.chat.id
-    queues[chat_id] = []
-    now_playing[chat_id] = None
-    try:
-        await voice.leave_group_call(chat_id)
-    except Exception:
-        pass
-    await m.reply_text("Stopped and cleared queue.")
+        await msg.edit_text(f"Error: {e}")
 
 async def main():
     await app.start()
     await voice.start()
-    print("Music bot is running. Press Ctrl+C to stop.")
-    try:
-        await asyncio.get_running_loop().create_future()
-    except (KeyboardInterrupt, SystemExit):
-        pass
-    finally:
-        await voice.stop()
-        await app.stop()
+    print("Bot running...")
+    await asyncio.get_running_loop().create_future()
 
 if __name__ == "__main__":
     asyncio.run(main())
